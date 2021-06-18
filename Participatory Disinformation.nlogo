@@ -37,7 +37,7 @@ extensions [ nw bitstring ]
 
 ;; # Rumor dissipation
 ;; dissipation-rate -- The chance that agents will "forget" a rumor during a tick
-;; only-one-dissipates -- determines whether only a single agent has a chance of forgetting a rumor in one tick, or if all agents have a chanced in one tick
+;; only-one-forgets -- determines whether only a single agent has a chance of forgetting a rumor in one tick, or if all agents have a chanced in one tick
 
 globals [
   times-heard-from-elites
@@ -66,15 +66,16 @@ to setup
   set-default-shape influencers "star"
   set-default-shape elites "pentagon"
 
+  ;; Create the social network and audience agents
   setup-network
 
-  ;; Randomly select frac-influencers % of agents to be influencers
+  ;; Randomly select frac-influencers % of audience agents to be influencers
   ask n-of ( frac-influencers * num-people ) turtles [
     set breed influencers
     set size 2
   ]
 
-  ;; Set the rest of the agents as regulars
+  ;; Set the rest of the audience agents as regulars
   ask turtles [
     if breed != influencers [
       set breed regulars
@@ -265,6 +266,7 @@ to go
     stop
   ]
 
+  ;; Fine-grained control of the model speed beyond that offered by the tick speed, in case we want to observe nuanced behavior
   if ( ticks mod model-rate-1-nth = 0 ) [
 
     ;; Agents attempt to adopt rumors from elites, adopt rumors from the social network, generate new rumors, or forget rumors
@@ -283,8 +285,8 @@ to go
         ]
       ]
 
-      if (not only-one-dissipates or random num-people = who) [
-        dissipate-rumors
+      if (not only-one-forgets or random num-people = who) [
+        forget-rumors
       ]
     ]
 
@@ -354,7 +356,7 @@ to generate-rumors
 end
 
 ;; Agent attempts to forget a rumor that it's already heard
-to dissipate-rumors
+to forget-rumors
   if ( random-float 1.0 < dissipation-rate ) [
     set rumors-heard? forget-rumor rumors-heard?
   ]
@@ -601,7 +603,7 @@ TEXTBOX
 10
 345
 28
-Network\n
+Network layout
 12
 0.0
 1
@@ -732,9 +734,9 @@ PENS
 "rumors created" 1.0 0 -16777216 true "" "plot times-created-rumor"
 
 PLOT
-10
+235
 585
-320
+545
 755
 Rumors heard
 time
@@ -840,7 +842,7 @@ heard-rumors-to-generate
 SWITCH
 210
 495
-387
+420
 528
 only-one-generates
 only-one-generates
@@ -851,11 +853,11 @@ only-one-generates
 SWITCH
 10
 535
-192
+180
 568
-only-one-dissipates
-only-one-dissipates
-0
+only-one-forgets
+only-one-forgets
+1
 1
 -1000
 
@@ -920,9 +922,9 @@ Rumor dissipation
 1
 
 PLOT
-330
+10
 585
-545
+225
 755
 Rumor counts
 rumor
@@ -938,15 +940,15 @@ PENS
 "default" 1.0 1 -2674135 true "" "histogram rumor-counts"
 
 SLIDER
-380
+385
 110
-417
+418
 256
 model-rate-1-nth
 model-rate-1-nth
 1
 10
-1.0
+3.0
 1
 1
 NIL
@@ -972,7 +974,7 @@ This NetLogo model focuses on a particular scope of the problem, specifically:
 - The new rumors are further communmicated by influencers within the audience in an attempt to get them adopted by the elites
 - Upon adoption, the elites spread the new rumors back to the audiences
 
-The original real-world particpiatory disinformation phenomenon also contains other dynamics such as the audience building a sense of collective grievance, and political elites mobilizing their agrieved audiences into collective action. These features are out of the scope of this model and are not represented in the simulation.
+The original real-world particpiatory disinformation phenomenon also contains other dynamics that are not included in this model, such as the audience building a sense of collective grievance, and political elites mobilizing their agrieved audiences into collective action. These features are out of the scope of this model and are not represented in the simulation.
 
 ## HOW IT WORKS
 
@@ -980,33 +982,157 @@ The original real-world particpiatory disinformation phenomenon also contains ot
 
 This model contains three types of agent breeds: elites, regulars, and influencers.
 
-`Elites` represent the political elite agents whose rumors are adopted by the audience (`regular` and `influencer`) agents.
+- `Elites` represent the political elite agents whose rumors are adopted by the audience (`regular` and `influencer`) agents.
+- `Regulars` represent the audience agents who generate new rumors, and adopt and spread rumors amongst each other in the network.
+- `Influencers` represent different audience agents whose rumors will be adopted by the `elites`. They also adopt and spread rumors in the network.
 
-`Regulars` represent the audience agents who generate and spread new rumors amongst each other in a network.
+_In this documentation we sometimes refer to the combined set of `regular` and `influencer` agents together as "audience" agents where it is convenient. However "audience agents" are not a specific type of named breed in the model._
 
-`Influencers` represent different audience agents whose rumors will be adopted by the `elites`, and also who also spread rumors amongst the network.
-
-### Agent properties
+### Agent Properties
 
 Every agent, regardless of its breed, posesses a property called `rumors-heard?`.
 
+`rumors-heard?` is a bitstring (from the NetLogo _bitstring_ extension), where each bit represents one of the unique rumors that can be adopted. If the bit is `1` or true, the specific rumor has been adopted. If the bit is `0` or false, the rumor has not been adopted.
+
+Agents adopt a rumor from another agent by looking for the first unheard rumor in another agent's bitstring and setting the corresponding bit from `0` to `1` in their own `rumors-heard?` bitstring.
+
+`Regular` and `influencer` agents start with no rumors heard. `Elite` agents start with a single random rumor heard.
+
+### Agent Actions
+
+During the execution of the model, the agents perform the following actions each step:
+
+#### Regular and influencer agents
+
+`Regular` agents and `influencer` agents will attempt to adopt from `elites`, adopt from the network, generate rumors, and forget rumors.
+
+- _Adopt from elites_: The agent has a random chance of adopting the first undeard rumor from the elite agents, based on the agent's distribution of exposure to the elites (see Model Environment).
+- _Adopt from the network_: The agent has a random chance of adopting the first unheard rumor from a random one of its neighbors, if any, based on the fraction of neighbors who have heard any rumors.
+- _Generate rumors_: The agent has a random chance of spontaneously "learning" a random rumor. It is possible that this rumor was already heard before.
+- _Forget rumors_: The agent has a random chance of spontaneously "unlearning" a random rumor.
+
+_By default, influencers will not generate rumors, but this behavior is controlled by a switch._
+
+_It is also possible to limit rumor generation and rumor forgetting behavior to only a single agent each step via switches._
 
 
-[describe agent properties]
+#### Elite agents
 
-[describe agent actions]
+`Elite` agents will attempt to trade-up rumors from `influencers`:
 
-[describe model environment]
+- _Trade-up to elites_: The elite will select a random influencer agent and attempt to adopt the first unherad rumor from it, if any.
 
-[describe order of events in SETUP]
+### Model Environment
 
-[describe order of events in GO]
+The model environment consists of two significan features: patch coloring to control the distribution of elite exposure to regular agents for rumor adoption from elites, and a network connecting regular and influencer agents that controls network exposure for rumor adoption from other agents in the network.
+
+**Patch coloring** is used to indicate which audience agents have a chance of adopting rumors from the elites, which is called _elite exposure_ in the model. There are three different variations of elite exposure:
+
+- _uniform_: all audience agents have a chance of adopting from elites
+- _irregular_: only certain irregular clusters of patches are colored, based on a voting algorithm, and agents on those colored patches have a chance of adoption
+- _block_: a contiguous block of patches are colored and agents on those colored patches have a chance of adoption
+
+_Patches colored green do not have elite exposure, while patches colored light red do have elite exposure._
+
+The **network layout** is used to connect audience agents (`regulars` and `influencers`) together in a simulation of a social network. Agents have a chance of adopting rumors from the neighbors to which they are connected in the network, with a greater chance based on the relative number of their neighbors who have also adopted any rumors. There are three different network layouts:
+
+- Preferential attachment
+- Random
+- Small world (uses the Watts Strogatz algorithm to get a better small world layout)
+
+_These different layouts do not change the functional behavior of the model, but only determine the structure and distribution of the connections between networked agents._
+
+### Setup and Go Procedures
+
+The **`setup`** procedure executes the following steps to initialize the model:
+
+- Runs the `clear-all` function to clear everything between executions
+- Sets a default shape for each of the three agent breeds
+- Sets up the network by generating a network with `num-people` number of "audience" agents based on the `network-type` and initializes the agents' `rumors-heard?` bitstring to set all rumors to false
+- Randomly selects some fraction of the agents to be influencer agents
+- Sets the rest of the agents to be regular agents
+- Makes visual space for the elite agent to be represented in the world by moving all of the networked agents slightly toward the bottom of the world
+- Creates an elite agent separately from the networked agents and initializes the elite agent's `rumors-heard?` to have a single random rumor set to true
+- Sets up the patch coloring for the distribution of elite exposure based on the `variant`
+- Resets the ticks
+
+The **`go`** procedure executes the following steps to execute agent behaviors:
+
+- Stop the model execution if either the number of ticks has exceeded `ticks-to-end` or if there are no turtles left who have not heard all of the possible rumors (i.e. full saturation of rumor disperal)
+- Optionally slow down the model execution with a fine-grained speed control based on `model-rate-1-nth`
+- Ask each audience agent (`regulars` and `influencers`) to do the following behaviors:
+	- Attempt to adopt an unheard rumor from the elites
+	- Attempt to adopt an unheard rumor from its neighbors in the social network
+	- Attempt to randomly generate a new rumor
+	- Attempt to randomly forget a previously heard rumor
+- Ask the elite agent to attempt to adopt a rumor from one of the influencer agents
+- Finally, increment the tick
 
 ## HOW TO USE IT
 
-(how to use the model, including a description of each of the items in the Interface tab)
+### Pre-execution Controls
 
-[describe inputs]
+Use the following controls to configure how the model will be set up prior to clicking the `setup` button:
+
+#### Population settings
+
+- _num-people_ -- the number of audience agents in the network (not including elites)
+- _frac-influencers_ -- the fraction of audience agents who are `influencers` (the remainder are `regulars`)
+
+#### Network layout settings
+
+- _network-type_ -- the type of network to generate (preferential, random, or small-world)
+
+_Preferential attachment settings_
+
+- _min-size_ -- the minimum degree of connection between nodes in the preferrential attachment network
+
+_Random network settings_
+
+- _network-density_ -- the density of the random network
+
+_Small world settings_
+
+- _neighborhood-size_ -- the number of nodes connected to each node in the small world network
+
+#### Elite exposure settings
+
+- _variant_ -- the distribution of the population exposed to top-down infuence from elite rumors (uniform, irregular, block)
+- _initial-green-pct_ -- the percentage of patches that are not exposed to elite rumors
+
+### Operation Controls
+
+Use the following controls to set up and operate the model's execution:
+
+- _setup_ -- Click the `setup` button to initialize the agents, network, and patch coloration
+- _go_ -- Click the `go` button to begin the simulation
+- _reinitialize_ -- Click the `reinitialize` button to reset the state of the simulation without resetting the network layout, agent placement, or patch coloration
+- _ticks-to-end_ -- the number of ticks before the simulation ends (if it doesn't end earlier due to total rumor dispersal)
+- _model-rate-1-nth_ -- slow down the model execution by 1 / n number of ticks, as a further refinement of the model speed slider
+
+### Model Parameter Controls
+
+Use the following controls to adjust behavior of agents within the simulation. It can be useful to run the simulation by clicking `go`, adjust some of these sliders, and click `reinitialize` and then `go` again to see how the settings influence the behavior using an identical network layout:
+
+
+;; ## Influence rates
+;; elite-influence -- the chance for agents to be influenced by top-down elite rumor dissemination
+;; social-influence -- the chance for agents to be influenced by adopt rumors from other agents in the network
+;; trade-up-influence -- the chance for an influencer agent to "trade-up" a novel rumor to the elites
+
+;; # Rumor generation
+;; rumor-generation -- the chance for an agent to spontaneously generate a new rumor during a tick
+;; max-rumors -- the maximum number of different rumors that can be spread through the network; used to initialize the bitstring of rumors-heard?
+;; heard-rumors-to-generate -- deterimines whether an agent must have already heard at least one rumor before they can generate any new rumors
+;; influencers-generate-rumors -- determines whether influencer agents can generate rumors in addition to regulars (who always generate rumors)
+;; only-one-generates -- determines whether only a single agent has a chance of generating a rumor in one tick, or if all agents have a chance in one tick
+
+;; # Rumor dissipation
+;; dissipation-rate -- The chance that agents will "forget" a rumor during a tick
+;; only-one-forgets -- determines whether only a single agent has a chance of forgetting a rumor in one tick, or if all agents have a chanced in one tick
+
+
+(how to use the model, including a description of each of the items in the Interface tab)
 
 [describe outputs]
 
@@ -1016,7 +1142,7 @@ Every agent, regardless of its breed, posesses a property called `rumors-heard?`
 
 [staggered regimes of mass adoption of newly generated rumors after they have been traded up by the influencers and broadcasted by the elites]
 [repeated adoption of rumors by agents who have exposure to elite influence reinforces the frame of the rumors and counteracts dissipation of rumors displayed by non-exposed agents]
-[sometimes specific rumors won't catch on or get traded up
+[sometimes specific rumors won't catch on or get traded up, but this might be an artifact of rumor generation]
 
 ## THINGS TO TRY
 
@@ -1033,6 +1159,7 @@ Every agent, regardless of its breed, posesses a property called `rumors-heard?`
 [explicitly model the process of trading up newly generated rumors through the network itself in order to reach the elites, instead of this happening "outside" of the network environment of the model]
 [include elites as both part of the network and as a disconnected media force]
 [change the way influencers are modeled so that it more closely matches real-world patterns of influencers, for example by making it more likely that agents that are selected as influencers are the ones with a higher degree of connection within the network]
+[make rumor generation more nuanced, e.g. generation happens relative to the amount of rumors already heard]
 
 ## NETLOGO FEATURES
 
