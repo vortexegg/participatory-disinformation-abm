@@ -1,6 +1,6 @@
 # participatory-disinformation-abm
 
-A NetLog agent-based model simulating participatory disinformation.
+A NetLogo agent-based model simulating participatory disinformation.
 
 ## WHAT IS IT?
 
